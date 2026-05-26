@@ -1,7 +1,6 @@
 - name: "DÉPLOIEMENT COMPLET SERVEUR WEB ASRC — IUC"
   hosts: ec2_server
   become: true
-  become_method: sudo
   remote_user: zra-emmanuel
 
   vars:
@@ -22,7 +21,7 @@
       cache_valid_time: 3600
 
   # =========================
-  # INSTALLATION PACKAGES WEB
+  # INSTALLATION APACHE + PHP
   # =========================
   - name: "Installation Apache2 + PHP"
     apt:
@@ -33,14 +32,21 @@
         - libapache2-mod-php
       state: present
 
-  - name: "Installation MySQL + dépendances"
+  # =========================
+  # INSTALLATION MARIADB (CORRECTION ICI)
+  # =========================
+  - name: "Installation MariaDB + dépendances"
     apt:
       name:
-        - mysql-server
-        - mysql-client
+        - mariadb-server
+        - mariadb-client
         - python3-pymysql
       state: present
+      update_cache: yes
 
+  # =========================
+  # UFW
+  # =========================
   - name: "Installation UFW"
     apt:
       name: ufw
@@ -49,31 +55,30 @@
   # =========================
   # DÉMARRAGE SERVICES
   # =========================
-  - name: "Activation Apache"
+  - name: "Démarrage Apache"
     systemd:
       name: apache2
       state: started
       enabled: true
 
-  - name: "Activation MySQL"
+  - name: "Démarrage MariaDB"
     systemd:
-      name: mysql
+      name: mariadb
       state: started
       enabled: true
 
   # =========================
-  # CONFIG MYSQL
+  # CONFIGURATION MARIA DB
   # =========================
-  - name: "Changer plugin root MySQL"
+  - name: "Définir mot de passe root MariaDB"
     shell: |
-      mysql -u root --connect-expired-password -e "
-        ALTER USER 'root'@'localhost'
-        IDENTIFIED WITH mysql_native_password BY '{{ mysql_root_password }}';
-        FLUSH PRIVILEGES;
-      "
+      mysql -u root -e "
+      ALTER USER 'root'@'localhost'
+      IDENTIFIED BY '{{ mysql_root_password }}';
+      FLUSH PRIVILEGES;"
     ignore_errors: true
 
-  - name: "Créer fichier credentials MySQL"
+  - name: "Créer fichier .my.cnf"
     copy:
       dest: /root/.my.cnf
       content: |
@@ -126,19 +131,21 @@
   - name: "Autoriser HTTP"
     ufw:
       rule: allow
-      port: '80'
-      proto: tcp
+      port: "80"
 
   - name: "Autoriser SSH"
     ufw:
       rule: allow
-      port: '22'
-      proto: tcp
+      port: "22"
+
+  - name: "Activer UFW"
+    ufw:
+      state: enabled
 
   # =========================
   # DEPLOIEMENT APP
   # =========================
-  - name: "Supprimer index Apache"
+  - name: "Supprimer page Apache"
     file:
       path: "{{ site_dir }}/index.html"
       state: absent
@@ -151,12 +158,11 @@
       group: www-data
       mode: '0644'
 
-  - name: "Définir index.php par défaut"
+  - name: "Configurer index.php par défaut"
     lineinfile:
       path: /etc/apache2/mods-enabled/dir.conf
       regexp: 'DirectoryIndex'
-      line: '    DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm'
-      backrefs: yes
+      line: 'DirectoryIndex index.php index.html'
 
   # =========================
   # RESTART SERVICES
@@ -166,7 +172,7 @@
       name: apache2
       state: restarted
 
-  - name: "Restart MySQL"
+  - name: "Restart MariaDB"
     systemd:
-      name: mysql
+      name: mariadb
       state: restarted
