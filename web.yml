@@ -1,0 +1,174 @@
+- name: "DÉPLOIEMENT COMPLET SERVEUR WEB ASRC — IUC"
+  hosts: ec2_server
+  become: true
+  remote_user: zra-emmanuel
+
+  vars:
+    site_dir: /var/www/html
+    mysql_root_password: "emmanuel@51"
+    mysql_db: "asrc_db"
+    mysql_user: "asrc_user"
+    mysql_user_password: "emmanuel@51"
+
+  tasks:
+
+  # =========================
+  # MISE À JOUR DU SYSTÈME
+  # =========================
+    - name: "Mise à jour des paquets apt"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+  # =========================
+  # INSTALLATION APACHE + PHP
+  # =========================
+    - name: "Installation d'Apache2 et PHP"
+      apt:
+        name:
+          - apache2
+          - php
+          - php-mysql
+          - libapache2-mod-php
+        state: present
+
+    - name: "Installation de MySQL Server + dépendances"
+      apt:
+        name:
+          - mysql-server
+          - mysql-client
+          - python3-pymysql
+        state: present
+
+  # =========================
+  # INSTALLATION UFW (CORRECTION IMPORTANTE)
+  # =========================
+    - name: "Installation UFW"
+      apt:
+        name: ufw
+        state: present
+
+  # =========================
+  # DÉMARRAGE SERVICES
+  # =========================
+    - name: "Activation et démarrage Apache"
+      systemd:
+        name: apache2
+        state: started
+        enabled: true
+
+    - name: "Activation et démarrage MySQL"
+      systemd:
+        name: mysql
+        state: started
+        enabled: true
+
+  # =========================
+  # CONFIGURATION MYSQL
+  # =========================
+    - name: "Changement plugin root MySQL"
+      shell: |
+        mysql -u root --connect-expired-password -e "
+          ALTER USER 'root'@'localhost'
+          IDENTIFIED WITH mysql_native_password BY '{{ mysql_root_password }}';
+          FLUSH PRIVILEGES;
+        "
+      ignore_errors: true
+
+    - name: "Création fichier .my.cnf"
+      copy:
+        dest: /root/.my.cnf
+        content: |
+          [client]
+          user=root
+          password={{ mysql_root_password }}
+        mode: '0600'
+
+    - name: "Suppression utilisateurs anonymes"
+      mysql_user:
+        name: ''
+        host_all: true
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création base de données"
+      mysql_db:
+        name: "{{ mysql_db }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création utilisateur MySQL"
+      mysql_user:
+        name: "{{ mysql_user }}"
+        password: "{{ mysql_user_password }}"
+        priv: "{{ mysql_db }}.*:ALL"
+        host: localhost
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création table etudiants"
+      mysql_query:
+        login_db: "{{ mysql_db }}"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        query: |
+          CREATE TABLE IF NOT EXISTS etudiants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nom VARCHAR(100) NOT NULL UNIQUE,
+            mot_de_passe VARCHAR(255) NOT NULL,
+            date_inscription TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+  # =========================
+  # CONFIGURATION FIREWALL
+  # =========================
+    - name: "Autoriser HTTP"
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: "Autoriser SSH"
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+  # =========================
+  # DÉPLOIEMENT APPLICATION
+  # =========================
+    - name: "Suppression page Apache par défaut"
+      file:
+        path: "{{ site_dir }}/index.html"
+        state: absent
+
+    - name: "Copie application PHP"
+      copy:
+        src: index.php
+        dest: "{{ site_dir }}/index.php"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: "Définir index.php par défaut"
+      lineinfile:
+        path: /etc/apache2/mods-enabled/dir.conf
+        regexp: 'DirectoryIndex'
+        line: '    DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm'
+        backrefs: yes
+
+  # =========================
+  # REDÉMARRAGE FINAL
+  # =========================
+    - name: "Redémarrage Apache"
+      systemd:
+        name: apache2
+        state: restarted
+
+    - name: "Redémarrage MySQL"
+      systemd:
+        name: mysql
+        state: restarted
