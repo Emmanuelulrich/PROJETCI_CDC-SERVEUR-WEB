@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -20,15 +19,9 @@ pipeline {
             }
         }
 
-       stage('Lint Ansible') {
-    steps {
-        bat 'wsl bash -c "ansible-lint asrc_config.yml || true"'
-    }
-}
-
-        stage('Validation manuelle') {
+        stage('Lint Ansible') {
             steps {
-                input message: 'Tests OK. Déployer sur 192.168.8.2 ?', ok: 'Déployer'
+                bat 'wsl bash -c "ansible-lint asrc_config.yml || true"'
             }
         }
 
