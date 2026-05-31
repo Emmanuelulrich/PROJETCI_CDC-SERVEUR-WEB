@@ -1,0 +1,174 @@
+# ============================================================
+# Instance Debian (Local)
+# Apache + PHP + MariaDB + Page d'enregistrement
+# ============================================================
+
+- name: "DÉPLOIEMENT COMPLET SERVEUR WEB ASRC — IUC"
+  hosts: ec2_server
+  become: true
+  remote_user: zra-emmanuel
+
+  vars:
+    site_dir: /var/www/html
+    mysql_root_password: "Emmanuel@51"
+    mysql_db: "asrc_db"
+    mysql_user: "asrc_user"
+    mysql_user_password: "Emmanuel@51"
+
+  tasks:
+
+    # MISE À JOUR DU SYSTÈME
+    - name: "Mise à jour des paquets apt"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    # INSTALLATION APACHE + PHP
+    - name: "Installation d'Apache2 et PHP"
+      apt:
+        name:
+          - apache2
+          - php
+          - php-mysql
+          - libapache2-mod-php
+        state: present
+
+    - name: "Activation et démarrage du service Apache"
+      systemd:
+        name: apache2
+        state: started
+        enabled: true
+
+    # INSTALLATION MARIADB
+    - name: "Installation de MariaDB Server"
+      apt:
+        name:
+          - mariadb-server
+          - mariadb-client
+          - python3-pymysql
+        state: present
+
+    - name: "Activation et démarrage du service MariaDB"
+      systemd:
+        name: mariadb
+        state: started
+        enabled: true
+
+    # SÉCURISATION MARIADB
+    - name: "Changement du mot de passe root MariaDB"
+      shell: |
+        mysql -u root --connect-expired-password -e "
+          ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';
+          FLUSH PRIVILEGES;
+        "
+      ignore_errors: true
+
+    - name: "Création du fichier .my.cnf pour connexions futures"
+      copy:
+        dest: /root/.my.cnf
+        content: |
+          [client]
+          user=root
+          password={{ mysql_root_password }}
+        mode: '0600'
+
+    - name: "Suppression des utilisateurs anonymes MariaDB"
+      mysql_user:
+        name: ''
+        host_all: true
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création de la base de données ASRC"
+      mysql_db:
+        name: "{{ mysql_db }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création de l'utilisateur MariaDB pour le site"
+      mysql_user:
+        name: "{{ mysql_user }}"
+        password: "{{ mysql_user_password }}"
+        priv: "{{ mysql_db }}.*:ALL"
+        host: localhost
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: "Création de la table etudiants"
+      mysql_query:
+        login_db: "{{ mysql_db }}"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        query: |
+          CREATE TABLE IF NOT EXISTS etudiants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nom VARCHAR(100) NOT NULL UNIQUE,
+            mot_de_passe VARCHAR(255) NOT NULL,
+            date_inscription TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+    # OUVERTURE DU PARE-FEU
+    - name: "Autoriser le port 80 (HTTP)"
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: "Autoriser le port 22 (SSH)"
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    # DÉPLOIEMENT DE LA PAGE PHP
+    - name: "Suppression de la page Apache par défaut"
+      file:
+        path: "{{ site_dir }}/index.html"
+        state: absent
+
+    - name: "Copie de la page PHP ASRC vers le serveur"
+      copy:
+        src: /mnt/g/MIKROTIK/aws/index.php
+        dest: "{{ site_dir }}/index.php"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: "Définir index.php comme page par défaut Apache"
+      lineinfile:
+        path: /etc/apache2/mods-enabled/dir.conf
+        regexp: 'DirectoryIndex'
+        line: '    DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm'
+        backrefs: yes
+
+    # REDÉMARRAGE FINAL DES SERVICES
+    - name: "Redémarrage d'Apache"
+      systemd:
+        name: apache2
+        state: restarted
+
+    - name: "Redémarrage de MariaDB"
+      systemd:
+        name: mariadb
+        state: restarted
+
+    # RÉSUMÉ FINAL
+    - name: "Récupération de l'IP du serveur"
+      shell: hostname -I | awk '{print $1}'
+      register: server_ip
+
+    - name: "Résumé du déploiement"
+      debug:
+        msg:
+          - "============================================"
+          - "   DÉPLOIEMENT ASRC / IUC TERMINÉ ✅"
+          - "============================================"
+          - "  Apache + PHP : actif et démarré"
+          - "  MariaDB      : actif et démarré"
+          - "  Base de données : asrc_db"
+          - "  Table : etudiants (nom, mot_de_passe)"
+          - "  Site  : http://{{ server_ip.stdout }}"
+          - "============================================"
