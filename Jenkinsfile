@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -15,13 +16,13 @@ pipeline {
 
         stage('Test syntaxe Ansible') {
             steps {
-                bat 'wsl ansible-playbook --syntax-check -i inventory/hosts.ini playbook.yml'
+                bat 'wsl ansible-playbook --syntax-check -i inventory/hosts.ini asrc_config.yml'
             }
         }
 
         stage('Lint Ansible') {
             steps {
-                bat 'wsl ansible-lint playbook.yml || true'
+                bat 'wsl ansible-lint asrc_config.yml || true'
             }
         }
 
@@ -34,14 +35,14 @@ pipeline {
         stage('Déploiement') {
             steps {
                 bat """
-                    wsl bash -c \"ANSIBLE_BECOME_PASS=${BECOME_PASSWORD} ansible-playbook -i inventory/hosts.ini playbook.yml\"
+                    wsl bash -c \"ANSIBLE_BECOME_PASS=${BECOME_PASSWORD} ansible-playbook -i inventory/hosts.ini asrc_config.yml\"
                 """
             }
         }
     }
 
     post {
-        success { echo 'Déploiement réussi sur le serveur Debian !' }
-        failure { echo 'Echec. Consulte les logs Jenkins.' }
+        success { echo 'Déploiement réussi !' }
+        failure { echo 'Echec. Consulte les logs.' }
     }
 }
