@@ -131,7 +131,7 @@
 
     - name: "Copie de la page PHP ASRC vers le serveur"
       copy:
-        src: /mnt/g/MIKROTIK/aws/index.php
+        src: index.php
         dest: "{{ site_dir }}/index.php"
         owner: www-data
         group: www-data
