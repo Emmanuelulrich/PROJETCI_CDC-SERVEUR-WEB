@@ -20,11 +20,11 @@ pipeline {
             }
         }
 
-        stage('Lint Ansible') {
-            steps {
-                bat 'wsl ansible-lint asrc_config.yml || true'
-            }
-        }
+       stage('Lint Ansible') {
+    steps {
+        bat 'wsl bash -c "ansible-lint asrc_config.yml || true"'
+    }
+}
 
         stage('Validation manuelle') {
             steps {
