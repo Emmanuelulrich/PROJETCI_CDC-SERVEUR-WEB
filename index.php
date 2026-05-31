@@ -49,8 +49,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --red: #e63329; --orange: #d4621a; --dark: #0d0a09;
-      --gold: #c8832a; --white: #f5ede6;
+      --red: #e63329; --orange: #1aa9d4; --dark: #0d0a09;
+      --gold: #2aa8c8; --white: #f5ede6;
       --glass: rgba(13,10,9,0.55);
     }
     html, body { width:100%; min-height:100%; background:var(--dark); color:var(--white); font-family:'Montserrat',sans-serif; }
